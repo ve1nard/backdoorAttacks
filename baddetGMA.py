@@ -1,5 +1,8 @@
 import torch
-from datasetBase import DatasetWrapper, clean_dataset_extraction, initial_pre_processing
+from datasetBase import DatasetWrapper, \
+                        clean_dataset_extraction, \
+                        initial_pre_processing, \
+                        dataset_poisoning
 
 from attackBase import AttackBase
 
@@ -36,7 +39,10 @@ class BadDetGMA(AttackBase):
         clean_train_dataset_transformed = DatasetWrapper(clean_train_dataset, train_pre_processing)
         clean_test_dataset_transformed = DatasetWrapper(clean_test_dataset, test_pre_processing)
 
-        # Declare the transformer for data poisoning
+        # Declare the transformer for data poisoning        
+        # If the dataset already contains posioned images, 
+        # no patch needs to be applied
+        poisoning_transform = None if self.args.poisoned else dataset_poisoning(self.args)
         
 
         # Creating a dataloader for both clean and poisoned datasets
