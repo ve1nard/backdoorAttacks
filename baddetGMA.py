@@ -25,7 +25,7 @@ class BadDetGMA(AttackBase):
     
     def poisoned_data_prep():
         pass
-            
+    
     def prepare_datasets(self):
         # Loadin the clean dataset and initial transformations
         clean_train_dataset, \
