@@ -43,11 +43,11 @@ class ApplyPatch():
     def __call__(self, original_img):
         patch_h, patch_w, _ = self.patch.shape
 
-        # Blend the patch into the original at the specified corner
+        # Blend the patch into the original image in the upper-left corner
         original_img[0 : 0+patch_h, 0 : 0+patch_w] = (
             self.blending_ratio * self.patch + (1 - self.blending_ratio) * original_img[0 : 0+patch_h, 0 : 0+patch_w]
         )
-        return self.add_trigger(original_img)
+        return original_img
     
 class ConvertToPIL():
     def __init__(self):
