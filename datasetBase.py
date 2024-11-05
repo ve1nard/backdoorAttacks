@@ -55,7 +55,7 @@ class ConvertToPIL():
     def __call__(self, img):
         return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
 
-def clean_dataset_extraction(dataset):
+def dataset_extraction(dataset):
     if dataset == 'coco':
         from torchvision.datasets import CocoDetection
         clean_train_dataset = CocoDetection(
@@ -68,11 +68,30 @@ def clean_dataset_extraction(dataset):
             annFile = './coco/annotations/image_info_test2017.json',
             transform=None,
             )
+        
+        # These two will be not None only in the case of manually constructed
+        # datasets that already have poisoned images included
+        bd_train_dataset = None
+        bd_test_dataset = None
+
+        # CocoDetection does not have a 'targets' attribute, thus to return
+        # the list of annotation for future use, we aggregate the targets manually
+        # Each target in the array will consist of multiple pairs (bounding box coordinates, object category)
+        # corresponding to all the objects present in the image
+        train_labels = [target for _, target in clean_train_dataset]
+        test_labels = [target for _, target in clean_test_dataset]
     else:
         raise Exception("Invalid Dataset")        
-    return clean_train_dataset, clean_test_dataset
+    return clean_train_dataset, \
+           clean_test_dataset, \
+           bd_train_dataset, \
+           bd_test_dataset, \
+           train_labels, \
+           test_labels
 
-def initial_pre_processing(args):
+# This is a set of transformations all the image samples (bening and poisoned) will pass through before
+# being fed to the trainer
+def clean_pre_processing(args):
     pre_processing = transforms.Compose([
         transforms.Resize(args.img_size[:2]),
         #transforms.RandomCrop(self.args.img_size[:2], padding=self.args.random_crop_padding),
@@ -81,7 +100,7 @@ def initial_pre_processing(args):
     ])
     return pre_processing, pre_processing
 
-def dataset_poisoning(args):
+def dataset_poisoning(args, train_labels, test_labels):
     # Take the existing poisoning patch and resize it according to the
     # dimensions of the dataset that will be passed to the model
     patch_array = transforms.Compose([
@@ -93,7 +112,10 @@ def dataset_poisoning(args):
     apply_patch = ApplyPatch(patch_array(Image.open(args.patch_location)), args.blending_ratio)
     # Transform used to convert poisoned image from array to PIL format
     convert_to_pil = ConvertToPIL()
-    # Construct a complete transformation that would generate poisoned images
+    # Construct a complete transformation that would generate poisoned images.
+    # All the images are resized first, and then the patch is applied
+    # Bening images are also resized to the same dimensions before they are
+    # used in the training loop.
     poisoned_train_transform = transforms.Compose([
         transforms.Resize(args.img_size[:2]),
         np.array,
@@ -101,4 +123,21 @@ def dataset_poisoning(args):
         convert_to_pil,
     ])
 
-    return poisoned_train_transform 
+    # In Global Misclassification Attacks, all the labels are replaced with a target label, which
+    # means that when generating poisoning indices, we are not concerned with the number of object
+    # in each image, rather, we take into account only the total number of images.
+    train_selected_indices = np.random.choice(np.arange(len(train_labels)), round(args.poison_ratio * len(train_labels)), replace = False)
+    train_poisoning_indices = np.zeros(len(train_labels))
+    train_poisoning_indices[list(train_selected_indices)] = 1
+    # For testing there will be two separate sets consisting of fully clean and fully posioned images,
+    # thus the poisoning_indices array for testing covers the whole testing dataset.
+    test_poisoning_indices =  np.ones(len(test_labels), dtype=int)
+
+    # train and test poisoning_transform are the same as of now
+    return poisoned_train_transform, \
+           poisoned_train_transform, \
+           train_poisoning_indices, \
+           test_poisoning_indices
+
+def poisoned_data_prep(args):
+    pass
