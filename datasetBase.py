@@ -4,10 +4,10 @@ import numpy as np
 from PIL import Image
 
 class DatasetWrapper(torch.utils.data.Dataset):   
-    def __init__(self, dataset, img_transform=None, ann_transform=None):
+    def __init__(self, dataset, img_transform=None, bbox_transform=None):
         self.dataset = dataset
         self.img_transform = img_transform
-        self.ann_transform = ann_transform
+        self.bbox_transform = bbox_transform
 
     def __getattr__(self, attr):
         if attr in self.__dict__:
@@ -21,8 +21,8 @@ class DatasetWrapper(torch.utils.data.Dataset):
         original_width, original_height = img.size
         if self.img_transform is not None:
             img = self.img_transform(img)
-        if self.ann_transform is not None:
-            annotations = self.ann_transform(original_width, original_height, annotations)
+        if self.bbox_transform is not None:
+            annotations = self.bbox_transform(original_width, original_height, annotations)
         return (img, annotations)
 
     def __len__(self):
