@@ -4,10 +4,10 @@ import numpy as np
 from PIL import Image
 
 class DatasetWrapper(torch.utils.data.Dataset):   
-    def __init__(self, dataset, img_transform=None, label_transform=None):
+    def __init__(self, dataset, img_transform=None, ann_transform=None):
         self.dataset = dataset
         self.img_transform = img_transform
-        self.label_transform = label_transform
+        self.ann_transform = ann_transform
 
     def __getattr__(self, attr):
         if attr in self.__dict__:
@@ -15,12 +15,15 @@ class DatasetWrapper(torch.utils.data.Dataset):
         return getattr(self.dataset, attr)
 
     def __getitem__(self, index):
-        img, label, *other_info = self.dataset[index]
+        # TO DO
+        # Make sure that the returned annotation is suitable for the YOLO model 
+        img, annotations = self.dataset[index]
+        original_width, original_height = img.size
         if self.img_transform is not None:
             img = self.img_transform(img)
-        if self.label_transform is not None:
-            label = self.label_transform(label)
-        return (img, label, *other_info)
+        if self.ann_transform is not None:
+            annotations = self.ann_transform(original_width, original_height, annotations)
+        return (img, annotations)
 
     def __len__(self):
         return len(self.dataset)
@@ -31,6 +34,39 @@ class DatasetWrapper(torch.utils.data.Dataset):
     #     # The getattr will be infinitely called in deepcopy process.
     #     # So, we need to manually deepcopy the wrapped dataset or raise error when "__setstate__" us called. Here we choose the first solution.
     #     return dataset_wrapper_with_transform(copy.deepcopy(self.wrapped_dataset), copy.deepcopy(self.wrap_img_transform), copy.deepcopy(self.wrap_label_transform))
+
+class Bbox_pre_processing():
+    def __init__(self, dataset_path, new_width, new_height, new_target):
+        self.new_width = new_width
+        self.new_height = new_height
+        self.new_target = new_target
+    
+    def __call__(self, original_width, original_height, annotations):
+        scale_x = self.new_width / original_width
+        scale_y = self.new_height / original_height
+        for ann in annotations:
+            # Scale bounding box coordinates
+            bbox = ann['bbox']
+            x, y, width_box, height_box = bbox
+            new_x = x * scale_x
+            new_y = y * scale_y
+            new_width_box = width_box * scale_x
+            new_height_box = height_box * scale_y            
+            # Update the bounding box in the annotation
+            ann['bbox'] = [new_x, new_y, new_width_box, new_height_box]
+        return annotations
+    
+class Annotation_poisoning():
+    def __init__(self, new_target_id):
+        self.target_id = new_target_id
+    
+    def __call__(self, annotations):
+        for ann in annotations:
+            # Update the class_id in the annotation to the target_id
+            ann['category_id'] = self.target_id
+        return annotations
+        
+    
 
 class ApplyPatch():
     def __init__(self, patch : np.ndarray, blending_ratio):
@@ -54,6 +90,28 @@ class ConvertToPIL():
         pass
     def __call__(self, img):
         return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
+    
+class PoisonedDatasetWrapper(torch.utils.data.Dataset):
+    def __init__(self, clean_dataset, poisoning_indices, poisoning_transform, target_class, target_id, save_folder):
+        self.clean_dataset = clean_dataset
+        self.bd_dataset = {}
+        self.poisoning_indices = poisoning_indices
+        self.poisoning_transform = poisoning_transform
+        self.target_class = target_class
+        self.target_id = target_id
+        self.annotation_transform = Annotation_poisoning(self.target_id)
+        self.save_folder = save_folder
+        self.transform_save_bd()
+    def transform_save_bd(self):
+        for index, poisoned in enumerate(self.poisoning_indices):
+            if poisoned == 1:
+                img, annotations = self.clean_dataset[index]
+                bd_img = self.poisoning_transform(img)
+                bd_annotations = self.annotation_transform(annotations)
+                self.bd_dataset[index] = (bd_img, bd_annotations)
+                # TO DO:
+                # save backdoored images and annotations in the filesystem
+
 
 def dataset_extraction(dataset):
     if dataset == 'coco':
@@ -116,7 +174,7 @@ def dataset_poisoning(args, train_labels, test_labels):
     # All the images are resized first, and then the patch is applied
     # Bening images are also resized to the same dimensions before they are
     # used in the training loop.
-    poisoned_train_transform = transforms.Compose([
+    train_poisoning_transform = transforms.Compose([
         transforms.Resize(args.img_size[:2]),
         np.array,
         apply_patch,
@@ -134,8 +192,8 @@ def dataset_poisoning(args, train_labels, test_labels):
     test_poisoning_indices =  np.ones(len(test_labels), dtype=int)
 
     # train and test poisoning_transform are the same as of now
-    return poisoned_train_transform, \
-           poisoned_train_transform, \
+    return train_poisoning_transform, \
+           train_poisoning_transform, \
            train_poisoning_indices, \
            test_poisoning_indices
 
