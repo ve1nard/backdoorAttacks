@@ -6,14 +6,14 @@ import random
 def declare_args(parser: argparse.ArgumentParser):
     parser.add_argument("-ds", "--dataset", type=str, default='coco')
     parser.add_argument('--poisoned', action='store_true', help="Specifies already poisoned dataset that doesn't need patching")
-    parser.add_argument("-dp", "--dataset_path", type=str)
+    parser.add_argument("-dp", "--dataset_path", type=str, default='./coco')
     parser.add_argument("-an", "--attack_name", type=str)
     parser.add_argument("-yp", "--yaml_path", type=str)
     parser.add_argument("-tc", "--target_class", type=str)
-    parser.add_argument("-pl", "--patch_location", type=str)
-    parser.add_argument("-br", "--blending_ratio", type=float, default=0.8)
+    parser.add_argument("-pl", "--patch_location", type=str, default='./patch.jpg')
+    parser.add_argument("-br", "--blending_ratio", type=float, default=0.1)
     parser.add_argument("-ps", "--patch_size", type=float, default=0.1)
-    parser.add_argument("-pr", "--poison_ratio", type=str)
+    parser.add_argument("-pr", "--poison_ratio", type=float)
     parser.add_argument("-rs", "--random_seed", type=int, default=0)
     parser.add_argument("-rc", "--random_crop_padding", type=int, default=4)
 

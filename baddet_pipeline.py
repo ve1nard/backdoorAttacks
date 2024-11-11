@@ -8,7 +8,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=sys.argv[0])
     setup.declare_args(parser)
     args = parser.parse_args()
-    setup.get_yaml_args(args)
+    #setup.get_yaml_args(args)
     setup.set_args(args)
 
     # Based on the desired attack type, we create a corresponding attack instance:
@@ -18,6 +18,7 @@ if __name__ == '__main__':
     #   4. Object Disappearance Attack
     if  args.attack_name == "gma":
         attack = BadDetGMA(args)
+        attack.prepare_datasets()
     elif args.attack_name == "rma":
         pass
     elif args.attack_name == "oga":

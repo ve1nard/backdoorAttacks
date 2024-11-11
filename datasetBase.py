@@ -2,6 +2,12 @@ import torch
 import torchvision.transforms as transforms
 import numpy as np
 from PIL import Image
+import os
+import json
+
+from torchvision.utils import draw_bounding_boxes
+from torchvision.transforms import ToTensor, ToPILImage
+
 
 class DatasetWrapper(torch.utils.data.Dataset):   
     def __init__(self, dataset, img_transform=None, bbox_transform=None):
@@ -36,10 +42,9 @@ class DatasetWrapper(torch.utils.data.Dataset):
     #     return dataset_wrapper_with_transform(copy.deepcopy(self.wrapped_dataset), copy.deepcopy(self.wrap_img_transform), copy.deepcopy(self.wrap_label_transform))
 
 class Bbox_pre_processing():
-    def __init__(self, dataset_path, new_width, new_height, new_target):
+    def __init__(self, dataset_path, new_width, new_height):
         self.new_width = new_width
         self.new_height = new_height
-        self.new_target = new_target
     
     def __call__(self, original_width, original_height, annotations):
         scale_x = self.new_width / original_width
@@ -60,13 +65,11 @@ class Annotation_poisoning():
     def __init__(self, new_target_id):
         self.target_id = new_target_id
     
-    def __call__(self, annotations):
+    def __call__(self, annotations):        
         for ann in annotations:
             # Update the class_id in the annotation to the target_id
             ann['category_id'] = self.target_id
         return annotations
-        
-    
 
 class ApplyPatch():
     def __init__(self, patch : np.ndarray, blending_ratio):
@@ -80,37 +83,74 @@ class ApplyPatch():
         patch_h, patch_w, _ = self.patch.shape
 
         # Blend the patch into the original image in the upper-left corner
-        original_img[0 : 0+patch_h, 0 : 0+patch_w] = (
+        original_img[0 : 0+patch_h, 0 : 0+patch_w] = np.round(
             self.blending_ratio * self.patch + (1 - self.blending_ratio) * original_img[0 : 0+patch_h, 0 : 0+patch_w]
-        )
+        ).astype(int)
         return original_img
     
-class ConvertToPIL():
-    def __init__(self):
-        pass
-    def __call__(self, img):
-        return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
-    
 class PoisonedDatasetWrapper(torch.utils.data.Dataset):
-    def __init__(self, clean_dataset, poisoning_indices, poisoning_transform, target_class, target_id, save_folder):
+    def __init__(self, clean_dataset, poisoning_indices, poisoning_transform, bbox_transform, target_class, target_id, save_folder):
         self.clean_dataset = clean_dataset
         self.bd_dataset = {}
         self.poisoning_indices = poisoning_indices
         self.poisoning_transform = poisoning_transform
+        self.bbox_transform = bbox_transform
         self.target_class = target_class
         self.target_id = target_id
         self.annotation_transform = Annotation_poisoning(self.target_id)
         self.save_folder = save_folder
         self.transform_save_bd()
     def transform_save_bd(self):
+        self.images_save_folder = os.path.join(self.save_folder, "images")
+        self.annotations_save_path = os.path.join(self.save_folder, "bd_annotations.json")
+        os.makedirs(self.images_save_folder, exist_ok=True)
+        bd_annotations_json = []
+        ctr=0
         for index, poisoned in enumerate(self.poisoning_indices):
             if poisoned == 1:
                 img, annotations = self.clean_dataset[index]
+                original_width, original_height = img.size
+                ctr = ctr+1
+                print(ctr)
+                if not annotations:
+                    continue
+                print(annotations[0])
+                img_id = annotations[0]['image_id']
                 bd_img = self.poisoning_transform(img)
                 bd_annotations = self.annotation_transform(annotations)
+                bd_annotations = self.bbox_transform(original_width, original_height, bd_annotations)
+                # Saving poisoned image and annotations both in the main memory
+                # and on the disk
                 self.bd_dataset[index] = (bd_img, bd_annotations)
-                # TO DO:
-                # save backdoored images and annotations in the filesystem
+                image_save_path = os.path.join(self.images_save_folder, f"{img_id}.jpg")
+                #bd_img.save(image_save_path)
+                bd_annotations_json.append(bd_annotations)
+
+
+
+
+                boxes = []
+                for ann in bd_annotations:
+                    x, y, w, h = ann['bbox']
+                    boxes.append([x, y, x + w, y + h])  # Convert to x_min, y_min, x_max, y_max
+                
+                # Convert boxes to a tensor
+                boxes_tensor = torch.tensor(boxes, dtype=torch.float)
+
+                # Define colors (green) for the bounding boxes
+                box_color = ["green"] * len(boxes)
+                
+                # Draw bounding boxes on the image
+                img_with_boxes = draw_bounding_boxes(bd_img, boxes_tensor, colors=box_color, width=2)
+
+                # Convert the tensor with boxes back to PIL image for display and saving
+                img_with_boxes_pil = ToPILImage()(img_with_boxes)
+
+                # Save the image with bounding boxes
+                img_with_boxes_pil.save(image_save_path)
+
+        with open(self.annotations_save_path, 'w') as f:
+            json.dump(bd_annotations_json, f)
 
 
 def dataset_extraction(dataset):
@@ -118,12 +158,12 @@ def dataset_extraction(dataset):
         from torchvision.datasets import CocoDetection
         clean_train_dataset = CocoDetection(
             root = './coco/train2017',
-            annFile = './coco/annotations/instances_train2017.json',
+            annFile = './coco/instances_train2017.json',
             transform=None,
             )
         clean_test_dataset = CocoDetection(
             root = './coco/test2017',
-            annFile = './coco/annotations/image_info_test2017.json',
+            annFile = './coco/image_info_test2017.json',
             transform=None,
             )
         
@@ -162,14 +202,12 @@ def dataset_poisoning(args, train_labels, test_labels):
     # Take the existing poisoning patch and resize it according to the
     # dimensions of the dataset that will be passed to the model
     patch_array = transforms.Compose([
-        transforms.Resize(tuple(dim*args.patch_size for dim in args.img_size[0:2])),
+        transforms.Resize(tuple(np.round(np.array([dim*args.patch_size for dim in args.img_size[0:2]])).astype(int))),
         np.array,
     ])
     # Now we create a custom transformation that would take an image 
     # from the dataset and apply the patch to it
     apply_patch = ApplyPatch(patch_array(Image.open(args.patch_location)), args.blending_ratio)
-    # Transform used to convert poisoned image from array to PIL format
-    convert_to_pil = ConvertToPIL()
     # Construct a complete transformation that would generate poisoned images.
     # All the images are resized first, and then the patch is applied
     # Bening images are also resized to the same dimensions before they are
@@ -178,7 +216,7 @@ def dataset_poisoning(args, train_labels, test_labels):
         transforms.Resize(args.img_size[:2]),
         np.array,
         apply_patch,
-        convert_to_pil,
+        transforms.ToTensor(),
     ])
 
     # In Global Misclassification Attacks, all the labels are replaced with a target label, which
