@@ -5,8 +5,6 @@ OVERLAY_IMAGE=""
 
 singularity exec --overlay $OVERLAY_IMAGE $SINGULARITY_IMAGE \
     bash -c "
-            source /share/apps/NYUAD5/miniconda/3-4.11.0/bin/activate; 
-            conda activate yolov5-env; 
             cd /backdoorAttacks/yolov5; 
             python3 -m torch.distributed.run --nproc_per_node 2 --master_port 12345 $MY_SCRIPT --img 224 --epochs 50 --data yolo_coco.yaml --weights yolov5s.pt --device 0,1
             "

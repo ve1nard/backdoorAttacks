@@ -10,7 +10,7 @@ if __name__ == '__main__':
     parser.add_argument("-dp", "--dataset_path", type=str, default='/backdoorAttacks/datasets/coco')
     parser.add_argument("-an", "--attack_name", type=str)
     parser.add_argument("-tc", "--target_class", type=str)
-    parser.add_argument("-pl", "--patch_location", type=str, default='/backdoorAttacks/python_scripts/patch.jpg')
+    parser.add_argument("-pl", "--patch_location", type=str, default='/backdoorAttacks/scripts/patch.jpg')
     parser.add_argument("-br", "--blending_ratio", type=float, default=0.1)
     parser.add_argument("-ps", "--patch_size", type=float, default=0.1)
     parser.add_argument("-pr", "--poison_ratio", type=float)
