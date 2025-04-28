@@ -16,12 +16,12 @@ YOLO is a state-of-the-art object detection model family initially introduced by
 
 2. There are two scripts that you will need: `main.py` and `attacks.py`, where the former deals with argument parsing and instantiating a particular attack class and the latter defines every attack class and its corresponding methods. Attacks are chosen and customized via arguments that you pass to `main.py`. In particular,
 
-* attack_name - the attack you want to perform (either *gma*, *rma*, or *oda*)
-* target_class - the class that you want to target in your attack (options are described in `yolo_coco.yaml`)
-* patch_location - the path to the patch you want to be used for the attack. The default option is the watermelon image (*patch.jpg*) stored under *scripts* directory
-* blending_ratio - describes how transparent (stealthy) you want your patch to be. The default value is 0.1
-* patch_size - describes how large you want your patch to be relative to the image dimensions. The default values is 0.1
-* poison_ratio - describes the portion of the images in the original dataset that you want to poison
+    * attack_name - the attack you want to perform (either *gma*, *rma*, or *oda*)
+    * target_class - the class that you want to target in your attack (options are described in `yolo_coco.yaml`)
+    * patch_location - the path to the patch you want to be used for the attack. The default option is the watermelon image (*patch.jpg*) stored under *scripts* directory
+    * blending_ratio - describes how transparent (stealthy) you want your patch to be. The default value is 0.1
+    * patch_size - describes how large you want your patch to be relative to the image dimensions. The default values is 0.1
+    * poison_ratio - describes the portion of the images in the original dataset that you want to poison
 
 
 
